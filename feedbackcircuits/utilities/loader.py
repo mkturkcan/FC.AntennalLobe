@@ -1,5 +1,6 @@
 import numpy as np
 import networkx as nx
+import seaborn as sns
 
 G = nx.read_gexf('hemi12_G_normalized.gexf')
 neurons = np.load('hemi_neurons.npy', allow_pickle=True).item()
@@ -269,3 +270,123 @@ for unique_type in ORNs.keys():
     CG, Cneurons = merge_nodes(CG, vals, unique_type+' PNs', Cneurons, text = 'type/type/type/type/type/type')
     CG, Cneurons = merge_nodes(CG, [unique_type+' PNs', unique_type+' ORNs'], unique_type+' Glom', Cneurons, text = 'type/type/type/type/type/type')
 """
+
+
+
+def extract_ln_features(gloms_to_keep = ['DC1','DL5'], fig_name = 'DC1_DL5', title = "Features of Local Neuron Cell Types for DM4 and DL5"):
+    """Extract features for local neurons."""
+
+    nodes_to_keep = []
+    CG_mini = CG.copy()
+
+    edges_to_remove = []
+    for u,v,data in CG_mini.edges(data=True):
+        if data['weight']<1: # used to be 25
+            edges_to_remove.append((u,v))
+    for i in edges_to_remove:
+        CG_mini.remove_edge(i[0],i[1])
+
+    # gloms_to_keep = ['DC1','DL5']
+    for _type in gloms_to_keep:
+        nodes_to_keep += list(CG_mini.predecessors(_type+' ORNs')) + list(CG_mini.successors(_type+' ORNs')) + list(CG_mini.successors(_type+' PNs')) + list(CG_mini.predecessors(_type+' PNs'))
+
+    for _type in gloms_to_keep:
+        nodes_to_keep += [_type+' ORNs'] + [_type+' PNs']
+    nodes_to_keep = list(set(nodes_to_keep))
+
+    nodes_to_keep_copy = nodes_to_keep.copy()
+    for i in nodes_to_keep_copy:
+        if 'ORNs' in i or 'PNs' in i:
+            glom = i.split(' ')[0]
+            print(glom)
+            if glom not in gloms_to_keep:
+                print('Removed', i)
+                nodes_to_keep.remove(i)
+            else:
+                print('Kept', i)
+
+    print('Final:')
+    print(nodes_to_keep)
+    #for _type in ['DC1','DL5']:
+    #    nodes_to_keep += [_type+' ORNs'] + [_type+' PNs']
+    CG_mini = CG_mini.subgraph(nodes_to_keep)
+    for i in CG_mini.nodes():
+        CG_mini.nodes[i]['label'] = i
+    for i,j in CG_mini.edges():
+        CG_mini.edges[i,j]['label'] = CG_mini.nodes[i]['label'] + '-' + CG_mini.nodes[j]['label']
+
+    nx.write_graphml(CG_mini, '2gloms_{}.graphml'.format(fig_name))
+    
+    CG_for_connectivity = CG_mini.copy()
+    
+    A = nx.adjacency_matrix(CG_for_connectivity)
+
+    CGnodes = list(CG_for_connectivity.nodes())
+    is_ORN = [i for i in range(len(CGnodes)) if ' ORNs' in CGnodes[i]]
+    is_PN = [i for i in range(len(CGnodes)) if ' PNs' in CGnodes[i]]
+    is_LN  = [i for i in range(len(CGnodes)) if CGnodes[i] in LNs]
+    ORN_names = [CGnodes[i] for i in range(len(CGnodes)) if ' ORNs' in CGnodes[i]]
+    PN_names = [CGnodes[i] for i in range(len(CGnodes)) if ' PNs' in CGnodes[i]]
+    LN_names = [CGnodes[i] for i in range(len(CGnodes)) if CGnodes[i] in LNs]
+    is_PN = []
+    PN_names = []
+    for ORN_name in ORN_names:
+        glom_name = ORN_name.split(' ')[0]
+        try:
+            is_PN.append(CGnodes.index(glom_name+' PNs'))
+            PN_names.append(glom_name+' PNs')
+        except:
+            pass
+
+    B = A[is_ORN,:][:,is_LN].todense()
+    BR = A[is_LN,:][:,is_ORN].T.todense()
+    print(B.shape)
+
+    C = A[is_LN,:][:,is_PN].T.todense()
+    CR = A[is_PN,:][:,is_LN].todense()
+    D = A[is_LN,:][:,is_LN].T.todense()
+
+    diff_M = np.abs((B>0)*1.-(C>0)*1.)
+
+    diff_M = ((B>0)*1.-(C>0)*1.)
+
+    # 7-8, 9-10
+    group_features = ['Diff(ORN>LN,LN>PN)', 
+                      'Diff(ORN>LN,LN>ORN)', 
+                      'AND(ORN>LN,LN>ORN)', 
+                      'AND(ORN>LN,LN>PN)',
+                      '#ORN>LN Gloms',
+                      '#LN>ORN Gloms',
+                      '#LN>PN Gloms',
+                      '#ORN>LN Syns','#LN>ORN Syns','#LN>PN Syns','#PN>LN Syns', '#LN>LN Syns', '#LN>LN Syns (I-O)', '#LN>LN Partners']
+    len(group_features)
+    groups = [np.sum(np.abs((B>0)*1.-(C>0)*1.), axis=0), # Diffs for OR>LN and LN>PN
+    np.sum(np.abs((B>0)*1.-(BR>0)*1.), axis=0), # Diffs for OR>LN and LN>OR
+    np.sum(np.multiply((B>0)*1.,(BR>0)*1.), axis=0), # Diffs for OR>LN and LN>OR
+    np.sum(np.multiply((B>0)*1.,(C>0)*1.), axis=0),
+    np.sum((B>0)*1., axis=0),
+    np.sum((BR>0)*1., axis=0),
+    np.sum((C>0)*1., axis=0),
+    np.sum(C, axis=0),
+    np.sum(CR, axis=0),
+    np.sum(B, axis=0),
+    np.sum(BR, axis=0), 
+    np.sum(D, axis=0)+np.sum(D.T, axis=0), 
+    np.sum(D, axis=0)-np.sum(D.T, axis=0), 
+    np.sum((D>0)*1., axis=0),]
+
+    from scipy.stats import zscore
+    J = np.asarray(np.vstack(groups).T)
+    O = zscore(J)
+
+    filtered_LN_names = []
+    for i in LN_names:
+        for j in all_real_LN_names:
+            if i in j:
+                filtered_LN_names.append(j)
+                break
+
+    sns.clustermap(O, yticklabels = filtered_LN_names, xticklabels = group_features, figsize=(10,40), method='ward', cbar_pos = None)
+    plt.title(title)
+    plt.savefig('LN_feature_clusters_general_{}.pdf'.format(fig_name))
+    return J, LN_names
