@@ -192,6 +192,116 @@ def spiking_circuit_simple(cell_groups, synapse_groups, neuron_models, synapse_m
 
 
 
+
+
+class AbstractCircuit:
+    def __init__(self):
+        """Initializes a circuit."""
+        self.cell_types = {}
+        self.synapse_types = {}
+    def add_cell_type(self, cell_type_name, cells):
+        """Adds a cell type to the circuit.
+
+        # Arguments
+            cell_type_name (str):
+                Cell type name.
+            cells (list of str):
+                Names of the neurons in the connectomics/synaptomics dataset to model these neurons by.
+        """
+        self.cell_types[cell_type_name] = cells
+    def add_feedforward_connection(self, presynaptic_cells, postsynaptic_cells, model):
+        """Adds a model to model the feedforward connection with.
+
+        # Arguments
+            presynaptic_cells (str):
+                Cell type name for the presynaptic neurons.
+            postsynaptic_cells (str):
+                Cell type name for the postsynaptic neurons.
+            model (function):
+                Model generating function for the computational model to model the feedforward connection with.
+        """
+        self.synapse_types[presynaptic_cells+'-'+postsynaptic_cells] = model
+    def add_feedback_connection(self, presynaptic_cells, postsynaptic_cells, forward_model, backward_model): 
+        """Adds a model to model the feedforward connection with.
+
+        # Arguments
+            presynaptic_cells (str):
+                Cell type name for the presynaptic neurons.
+            postsynaptic_cells (str):
+                Cell type name for the postsynaptic neurons.
+            model (function):
+                Model generating function for the computational model to model the feedforward connection with.
+        """
+        self.synapse_types[presynaptic_cells+'-'+postsynaptic_cells] = forward_model
+        self.synapse_types[postsynaptic_cells+'-'+presynaptic_cells] = backward_model
+    
+
+class Subregion:
+    """Class defining a subregion/component in the brain."""
+    def __init__(self, C, name):
+        """Initializes a circuit.
+        
+        # Arguments
+            C (AbstractCircuit class):
+                Cell type name for the presynaptic neurons.
+        """
+        self.name = name
+        self.cell_types = {}
+        self.synapse_types = {}
+        self.cell_definitions = {}
+        self.connectivity_definitions = {}
+        self.C = C
+    def add_cell_type(self, cell_type_name, cells, local_type):
+        self.C.add_cell_type(cell_type_name, cells)
+        if local_type not in self.cell_definitions:
+            self.cell_definitions[local_type] = cells
+        if local_type in self.cell_definitions:
+            self.cell_definitions[local_type] += cells
+    def add_feedforward_connection(self, presynaptic_cells, postsynaptic_cells, model):
+        """Adds a model to model the feedforward connection with.
+
+        # Arguments
+            presynaptic_cells (str):
+                Cell type name for the presynaptic neurons.
+            postsynaptic_cells (str):
+                Cell type name for the postsynaptic neurons.
+            model (function):
+                Model generating function for the computational model to model the feedforward connection with.
+        """
+        self.C.add_feedforward_connection(presynaptic_cells, postsynaptic_cells, model)
+    def add_feedback_connection(self, presynaptic_cells, postsynaptic_cells, forward_model, backward_model):
+        """Adds a model to model the feedforward connection with.
+
+        # Arguments
+            presynaptic_cells (str):
+                Cell type name for the presynaptic neurons.
+            postsynaptic_cells (str):
+                Cell type name for the postsynaptic neurons.
+            model (function):
+                Model generating function for the computational model to model the feedforward connection with.
+        """
+        self.C.add_feedforward_connection(presynaptic_cells, postsynaptic_cells, forward_model, backward_model)
+
+class Glomerulus(Subregion):
+    """Class defining a glomerulus component in the antennal lobe.
+    """
+    def __init__(self, *kwargs):
+        super().__init__(*kwargs)
+
+class Compartment(Subregion):
+    """Class defining a compartment component in the mushroom body.
+    """
+    def __init__(self, *kwargs):
+        super().__init__(*kwargs)
+
+class Tract(Subregion):
+    """Class defining a tract component in the lateral horn.
+    """
+    def __init__(self, *kwargs):
+        super().__init__(*kwargs)
+
+
+
 class SCC:
     """A class that implements the concept of an SCC."""
     def __init__(self, synapse_models, interaction_models, inputs = None, outputs = None):
