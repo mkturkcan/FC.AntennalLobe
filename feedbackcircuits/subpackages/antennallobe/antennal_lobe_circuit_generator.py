@@ -2,6 +2,9 @@ import networkx as nx
 import numpy as np
 import json 
 
+import sys
+sys.path.append("...")
+
 G = nx.read_gexf('hemibrain_AL_ctype_level.gexf')
 print('Cell type graph has '+str(len(G.nodes()))+' nodes.')
 
