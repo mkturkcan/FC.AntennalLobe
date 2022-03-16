@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="https://keremturkcan.com/fc_feedback.gif" alt="Inverting the Response Surface" />
+</p>
+
+
 # FC.AntennalLobe
 
 The functional logic of brain circuits of Drosophila neuropils is largely determined by local/intrinsic neurons. Detailed connectomics datasets such as Hemibrain reveal, in many neuropils, a massive number of nested feedback loops among their input, output and local neurons. Dissecting the role of these feedback circuits is key to the understanding the computation taking place in these neuropils. 
