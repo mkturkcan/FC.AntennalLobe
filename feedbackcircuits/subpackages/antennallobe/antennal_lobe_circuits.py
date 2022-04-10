@@ -282,8 +282,9 @@ def setup_spiking_SPU(ORN_PN_gain = 1., ORN_LN_gain = 1., LN_PN_gain = 1.):
     return AL_SPU
 
 
-def setup_spiking_default(ORN_PN_gain = 1., ORN_LN_gain = 1., LN_PN_gain = 1., PN_LN_gain = 1., interaction_gain = 1., LN_LN_gain=1.):
-    """Holds computational models and parameters for an antennal lobe model."""
+def setup_spiking_beta(ORN_PN_gain = 1., ORN_LN_gain = 1., LN_PN_gain = 1., PN_LN_gain = 1., interaction_gain = 1., LN_LN_gain=1.):
+    """Holds computational models and parameters for an antennal lobe model 
+    (for the beta release of the package)."""
     def gen_ORN(G, x):
         params = dict(
             br=1.0,
@@ -513,7 +514,263 @@ def setup_spiking_default(ORN_PN_gain = 1., ORN_LN_gain = 1., LN_PN_gain = 1., P
                           'LNs-ORNs-LNs': ORN_PN_LN_ORN_interaction} # Feedback Loop with Interactions
     return neuron_models, synapse_models, interaction_models
 
+def setup_spiking_default(ORN_PN_gain = 1., ORN_LN_gain = 1., LN_PN_gain = 1., PN_LN_gain = 1., interaction_gain = 1., LN_LN_gain=1., exLN_LN_gain=1., LN_exLN_gain=1.):
+    # Default setup for the ORN-PN-LN-ORN network
+    def gen_ORN(G, x):
+        params = dict(
+            br=1.0,
+            dr=10.0,
+            gamma=0.138,
+            a1=45.0,
+            b1=0.8,
+            a2=199.574,
+            b2=51.887,
+            a3=2.539,
+            b3=0.9096,
+            kappa=9593.9,
+            p=1.0,
+            c=0.06546,
+            Imax=150.159,
+        )
+        G.add_node(x+'_OTP', **{"class": "OTP"}, **params)
 
+        params = dict(
+            ms=-5.3,
+            ns=-4.3,
+            hs=-12.0,
+            gNa=120.0,
+            gK=20.0,
+            gL=0.3,
+            ga=47.7,
+            ENa=55.0,
+            EK=-72.0,
+            EL=-17.0,
+            Ea=-75.0,
+            sigma=0.00,
+            refperiod=0.0,
+        )
+        G.add_node(x+'_RN', **{"class": "NoisyConnorStevens"}, **params)
+        G.add_edge(x+'_OTP', x+'_RN')
+
+        params = dict(
+            ar=12.5,
+            ad=12.19,
+            gmax=0.6/10000.*ORN_PN_gain,
+        )
+        G.add_node(x+'_ARN', **{"class": "Alpha"}, **params)
+        G.add_edge(x+'_RN', x+'_ARN')
+
+        params = dict(
+            ar=12.5,
+            ad=12.19,
+            gmax=0.6/1000.*ORN_LN_gain,
+        )
+        G.add_node(x+'_ARN_LN', **{"class": "Alpha"}, **params)
+        G.add_edge(x+'_RN', x+'_ARN_LN')
+
+    def gen_PN(G, x):
+        params = dict(
+            ms=-5.3,
+            ns=-4.3,
+            hs=-12.0,
+            gNa=120.0,
+            gK=20.0,
+            gL=0.3,
+            ga=47.7,
+            ENa=55.0,
+            EK=-72.0,
+            EL=-17.0,
+            Ea=-75.0,
+            sigma=0.00,
+            refperiod=0.0,
+        )
+        G.add_node(x+'_PN', **{"class": "NoisyConnorStevens"}, **params)
+
+    def gen_LN(G, x):
+        params = dict(
+            ms=-5.3,
+            ns=-4.3,
+            hs=-12.0,
+            gNa=120.0,
+            gK=20.0,
+            gL=0.3,
+            ga=47.7,
+            ENa=55.0,
+            EK=-72.0,
+            EL=-17.0,
+            Ea=-75.0,
+            sigma=0.00,
+            refperiod=0.0,
+        )
+        G.add_node(x, **{"class": "NoisyConnorStevens"}, **params)
+
+    def ORN_PN_LN_ORN_interaction(G,x,y,z,i,j, dist_gain=1.):
+        params = dict(
+            ar=12.5,
+            ad=12.19,
+            gmax=1./100. * dist_gain * interaction_gain,
+        )
+        G.add_node(x+'_to_'+y+'_PreLNAlpha'+'_'+str(z)+'_'+str(i)+'_'+str(j), **{"class": "Alpha"}, **params)
+        G.add_edge(x, x+'_to_'+y+'_PreLNAlpha'+'_'+str(z)+'_'+str(i)+'_'+str(j))
+
+        params = dict(
+            dummy=0.0,
+        )
+        G.add_node(x+'_to_'+y+'_PreLN'+'_'+str(z)+'_'+str(i)+'_'+str(j), **{"class": "PreLN"}, **params) # LN>(LN>ORN)
+        G.add_edge(x+'_to_'+y+'_PreLNAlpha'+'_'+str(z)+'_'+str(i)+'_'+str(j), x+'_to_'+y+'_PreLN'+'_'+str(z)+'_'+str(i)+'_'+str(j))
+        G.add_edge(x+'_to_'+y+'_PreLN'+'_'+str(z)+'_'+str(i)+'_'+str(j), y+'_'+z+'_AT'+'_'+str(j)) # (LN>ORN) to (ORN>PN)
+        return [x+'_to_'+y+'_PreLNAlpha'+'_'+str(z)+'_'+str(i)+'_'+str(j), 'g']
+
+    def ORN_ORN_LN_interaction(G,x,y,z,i,j, dist_gain=1.):
+        params = dict(
+            ar=12.5,
+            ad=12.19,
+            gmax=1./100. * dist_gain * interaction_gain,
+        )
+        G.add_node(x+'_to_'+y+'_PreLNAlpha'+'_'+str(z)+'_'+str(i)+'_'+str(j), **{"class": "Alpha"}, **params)
+        G.add_edge(x, x+'_to_'+y+'_PreLNAlpha'+'_'+str(z)+'_'+str(i)+'_'+str(j))
+
+        params = dict(
+            dummy=0.0,
+        )
+        G.add_node(x+'_to_'+y+'_PreLN'+'_'+str(z)+'_'+str(i)+'_'+str(j), **{"class": "PreLN"}, **params) # LN>(LN>ORN)
+        G.add_edge(x+'_to_'+y+'_PreLNAlpha'+'_'+str(z)+'_'+str(i)+'_'+str(j), x+'_to_'+y+'_PreLN'+'_'+str(z)+'_'+str(i)+'_'+str(j))
+        #G.add_node(x+'_'+y+'_to_'+z+'_AT'+'_'+str(i)+'_'+str(j), **{"class": "OSNAxt2"}, **params) # ORN>(ORN>PN)
+        #G.add_edge(y+'_ARN', x+'_'+y+'_to_'+z+'_AT'+'_'+str(i)+'_'+str(j))
+        #G.add_edge(x+'_'+y+'_to_'+z+'_AT'+'_'+str(i)+'_'+str(j), z)
+        G.add_edge(x+'_to_'+y+'_PreLN'+'_'+str(z)+'_'+str(i)+'_'+str(j), y+'_'+z+'_AT'+'_'+str(j)) # (LN>ORN) to (ORN>PN)
+        return [y+'_'+z+'_AT'+'_'+str(j), 'g']
+
+    def gen_ORNPN_syn(G, x, y, i, gain=1.):
+        params = dict(
+            bias=1.0,
+            gain=1. * gain,
+        )
+        G.add_node(x+'_'+y+'_AT'+'_'+str(i), **{"class": "OSNAxt2"}, **params) # ORN>(ORN>PN)
+        G.add_edge(x+'_ARN', x+'_'+y+'_AT'+'_'+str(i))
+        G.add_edge(x+'_'+y+'_AT'+'_'+str(i), y+'_PN')
+        return [x+'_'+y+'_AT'+'_'+str(i), 'I']
+
+    def gen_ORNLN_syn(G, x, y, i, gain=1.):
+        params = dict(
+            bias=1.0,
+            gain=1. * gain,
+        )
+        G.add_node(x+'_'+y+'_AT'+'_'+str(i), **{"class": "OSNAxt2"}, **params) # ORN>(ORN>PN)
+        G.add_edge(x+'_ARN_LN', x+'_'+y+'_AT'+'_'+str(i))
+        G.add_edge(x+'_'+y+'_AT'+'_'+str(i), y)
+        return [x+'_'+y+'_AT'+'_'+str(i), 'I']
+
+    def gen_regsyn(G, x, y, i, gain=1.):
+        params = dict(
+            ar=12.5,
+            ad=12.19,
+            gmax=1./10000.*gain*PN_LN_gain,
+        )
+        G.add_node(x+'_to_'+y+'_Alpha_'+str(i), **{"class": "Alpha"}, **params)
+        params = dict(
+            bias=1.0,
+            gain=1.,
+        )
+        G.add_node(x+'_to_'+y+'_Converter_'+str(i), **{"class": "OSNAxt2"}, **params)
+        G.add_edge(x+'_PN', x+'_to_'+y+'_Alpha_'+str(i))
+        G.add_edge(x+'_to_'+y+'_Alpha_'+str(i), x+'_to_'+y+'_Converter_'+str(i))
+        G.add_edge(x+'_to_'+y+'_Converter_'+str(i), y)
+        return [x+'_to_'+y+'_Alpha_'+str(i), 'g']
+
+    def gen_regsyn_PN(G, x, y, i, gain=1.):
+        params = dict(
+            ar=12.5,
+            ad=12.19,
+            gmax=1./10000.*gain*np.abs(LN_PN_gain),
+        )
+        G.add_node(x+'_to_'+y+'_Alpha_'+str(i), **{"class": "Alpha"}, **params)
+        params = dict(
+            bias=1.0,
+            gain=1.*np.sign(LN_PN_gain),
+        )
+        G.add_node(x+'_to_'+y+'_Converter_'+str(i), **{"class": "OSNAxt2"}, **params)
+        G.add_edge(x, x+'_to_'+y+'_Alpha_'+str(i))
+        G.add_edge(x+'_to_'+y+'_Alpha_'+str(i), x+'_to_'+y+'_Converter_'+str(i))
+        G.add_edge(x+'_to_'+y+'_Converter_'+str(i), y+'_PN')
+        return [x+'_to_'+y+'_Alpha_'+str(i), 'g']
+
+    def gen_regsyn_LN(G, x, y, i, gain=1.):
+
+        params = dict(
+            ar=12.5,
+            ad=12.19,
+            gmax=1./1000.*gain,
+        )
+
+        G.add_node(x+'_to_'+y+'_Alpha_'+str(i), **{"class": "Alpha"}, **params)
+
+        params = dict(
+            bias=1.0,
+            gain=1.,
+        )
+
+        G.add_node(x+'_to_'+y+'_Converter_'+str(i), **{"class": "OSNAxt2"}, **params)
+        G.add_edge(x+'_RN', x+'_to_'+y+'_Alpha_'+str(i))
+        G.add_edge(x+'_to_'+y+'_Alpha_'+str(i), x+'_to_'+y+'_Converter_'+str(i))
+        G.add_edge(x+'_to_'+y+'_Converter_'+str(i), y)
+        return [x+'_to_'+y+'_Alpha_'+str(i), 'g']
+    
+    def gen_regsyn_LN2(G, x, y, i, gain=1.):
+        params = dict(
+            ar=12.5,
+            ad=12.19,
+            gmax=1./10000.*gain*LN_LN_gain,
+        )
+        G.add_node(x+'_to_'+y+'_Alpha_'+str(i), **{"class": "Alpha"}, **params)
+        params = dict(
+            bias=1.0,
+            gain=-1.,
+        )
+        G.add_node(x+'_to_'+y+'_Converter_'+str(i), **{"class": "OSNAxt2"}, **params)
+        G.add_edge(x, x+'_to_'+y+'_Alpha_'+str(i))
+        G.add_edge(x+'_to_'+y+'_Alpha_'+str(i), x+'_to_'+y+'_Converter_'+str(i))
+        G.add_edge(x+'_to_'+y+'_Converter_'+str(i), y)
+        return [x+'_to_'+y+'_Alpha_'+str(i), 'g']
+    
+    def gen_regsyn_LNex(G, x, y, i, gain=1.):
+        params = dict(
+            ar=12.5,
+            ad=12.19,
+            gmax=1./1000000.*gain*exLN_LN_gain,
+        )
+        G.add_node(x+'_to_'+y+'_Alpha_'+str(i), **{"class": "Alpha"}, **params)
+        params = dict(
+            bias=1.0,
+            gain=1.,
+        )
+        G.add_node(x+'_to_'+y+'_Converter_'+str(i), **{"class": "OSNAxt2"}, **params)
+        G.add_edge(x, x+'_to_'+y+'_Alpha_'+str(i))
+        G.add_edge(x+'_to_'+y+'_Alpha_'+str(i), x+'_to_'+y+'_Converter_'+str(i))
+        G.add_edge(x+'_to_'+y+'_Converter_'+str(i), y)
+        return [x+'_to_'+y+'_Alpha_'+str(i), 'g']
+    
+    def gen_regsyn_exLN(G, x, y, i, gain=1.):
+        params = dict(
+            ar=12.5,
+            ad=12.19,
+            gmax=1./1000000.*gain*LN_exLN_gain,
+        )
+        G.add_node(x+'_to_'+y+'_Alpha_'+str(i), **{"class": "Alpha"}, **params)
+        params = dict(
+            bias=1.0,
+            gain=-1.,
+        )
+        G.add_node(x+'_to_'+y+'_Converter_'+str(i), **{"class": "OSNAxt2"}, **params)
+        G.add_edge(x, x+'_to_'+y+'_Alpha_'+str(i))
+        G.add_edge(x+'_to_'+y+'_Alpha_'+str(i), x+'_to_'+y+'_Converter_'+str(i))
+        G.add_edge(x+'_to_'+y+'_Converter_'+str(i), y)
+        return [x+'_to_'+y+'_Alpha_'+str(i), 'g']
+
+    neuron_models = {'ORNs': gen_ORN, 'PNs': gen_PN, 'LNs': gen_LN, 'exLNs': gen_LN}
+    synapse_models = {'ORNs-LNs': gen_ORNLN_syn, 'LNs-PNs': gen_regsyn_PN, 'PNs-LNs': gen_regsyn, 'ORNs-PNs': gen_ORNPN_syn, 'LNs-LNs': gen_regsyn_LN2, 'LNs-exLNs': gen_regsyn_LNex, 'exLNs-LNs': gen_regsyn_exLN}
+    interaction_models = {'LNs-ORNs-PNs': ORN_PN_LN_ORN_interaction, 'LNs-ORNs-LNs': ORN_PN_LN_ORN_interaction}
+    return neuron_models, synapse_models, interaction_models
 
 
 def generate_simple_al():
